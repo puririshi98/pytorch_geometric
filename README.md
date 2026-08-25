@@ -354,10 +354,9 @@ pip install torch_geometric
 
 If you want to utilize the full set of features from PyG, there exists several additional libraries you may want to install:
 
-- **[`pyg-lib`](https://github.com/pyg-team/pyg-lib)**: Heterogeneous GNN operators, graph sampling routines, and [`SplineConv`](https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.nn.conv.SplineConv.html) support
+- **[`pyg-lib`](https://github.com/pyg-team/pyg-lib)**: Heterogeneous GNN operators, graph sampling routines, graph clustering routines, and [`SplineConv`](https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.nn.conv.SplineConv.html) support
 - **[`torch-scatter`](https://github.com/rusty1s/pytorch_scatter)**: Accelerated and efficient sparse reductions
 - **[`torch-sparse`](https://github.com/rusty1s/pytorch_sparse)**: [`SparseTensor`](https://pytorch-geometric.readthedocs.io/en/latest/advanced/sparse_tensor.html) support
-- **[`torch-cluster`](https://github.com/rusty1s/pytorch_cluster)**: Graph clustering routines
 
 These packages come with their own CPU and GPU kernel implementations based on the [PyTorch C++/CUDA/hip(ROCm) extension interface](https://github.com/pytorch/extension-cpp).
 For a basic usage of PyG, these dependencies are **fully optional**.
@@ -365,12 +364,28 @@ We recommend to start with a minimal installation, and install additional depend
 
 For ease of installation of these extensions, we provide `pip` wheels for all major OS/PyTorch/CUDA combinations, see [here](https://data.pyg.org/whl).
 
+#### PyTorch 2.12
+
+To install the binaries for PyTorch 2.12, simply run
+
+```
+pip install pyg_lib torch_scatter torch_sparse -f https://data.pyg.org/whl/torch-2.12.0+${CUDA}.html
+```
+
+where `${CUDA}` should be replaced by either `cpu`, `cu126`, `cu130`, or `cu132` depending on your PyTorch installation.
+
+|             | `cpu` | `cu126` | `cu128` | `cu130` | `cu132` |
+| ----------- | ----- | ------- | ------- | ------- | ------- |
+| **Linux**   | ✅    | ✅      |         | ✅      | ✅      |
+| **Windows** | ✅    | ✅      |         | ✅      | ✅      |
+| **macOS**   | ✅    |         |         |         |         |
+
 #### PyTorch 2.11
 
 To install the binaries for PyTorch 2.11, simply run
 
 ```
-pip install pyg_lib torch_scatter torch_sparse torch_cluster -f https://data.pyg.org/whl/torch-2.11.0+${CUDA}.html
+pip install pyg_lib torch_scatter torch_sparse -f https://data.pyg.org/whl/torch-2.11.0+${CUDA}.html
 ```
 
 where `${CUDA}` should be replaced by either `cpu`, `cu126`, `cu128`, or `cu130` depending on your PyTorch installation.
@@ -386,7 +401,7 @@ where `${CUDA}` should be replaced by either `cpu`, `cu126`, `cu128`, or `cu130`
 To install the binaries for PyTorch 2.10, simply run
 
 ```
-pip install pyg_lib torch_scatter torch_sparse torch_cluster -f https://data.pyg.org/whl/torch-2.10.0+${CUDA}.html
+pip install pyg_lib torch_scatter torch_sparse -f https://data.pyg.org/whl/torch-2.10.0+${CUDA}.html
 ```
 
 where `${CUDA}` should be replaced by either `cpu`, `cu126`, `cu128`, or `cu130` depending on your PyTorch installation.
@@ -402,7 +417,7 @@ where `${CUDA}` should be replaced by either `cpu`, `cu126`, `cu128`, or `cu130`
 To install the binaries for PyTorch 2.9, simply run
 
 ```
-pip install pyg_lib torch_scatter torch_sparse torch_cluster -f https://data.pyg.org/whl/torch-2.9.0+${CUDA}.html
+pip install pyg_lib torch_scatter torch_sparse -f https://data.pyg.org/whl/torch-2.9.0+${CUDA}.html
 ```
 
 where `${CUDA}` should be replaced by either `cpu`, `cu126`, `cu128`, or `cu130` depending on your PyTorch installation.
