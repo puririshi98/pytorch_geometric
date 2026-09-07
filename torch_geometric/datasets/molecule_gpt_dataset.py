@@ -3,6 +3,7 @@ import json
 import multiprocessing
 import os
 import sys
+import time
 from collections import defaultdict
 from multiprocessing import Pool
 from typing import Callable, List, Optional, Tuple
@@ -16,6 +17,39 @@ from torch_geometric.data import Data, InMemoryDataset, download_url
 from torch_geometric.io import fs
 from torch_geometric.llm.models import LLM
 from torch_geometric.utils import one_hot
+
+
+def _get_pubchem_json(
+    url: str,
+    num_retries: int = 5,
+    delay: float = 5.0,
+) -> dict:
+    r"""Fetches a PubChem PUG-View JSON page.
+
+    PubChem answers with HTTP 503 and a :obj:`{"Fault": {"Code":
+    "PUGVIEW.ServerBusy", ...}}` body (instead of the requested data) whenever
+    it is rate-limited or busy, so the request is retried with exponential
+    backoff before giving up with a descriptive error.
+    """
+    for attempt in range(num_retries + 1):
+        response = requests.get(url)
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+
+        if response.ok and 'Fault' not in data:
+            return data
+
+        if attempt < num_retries:
+            time.sleep(delay * 2**attempt)
+
+    fault = data.get('Fault', {})
+    raise RuntimeError(
+        f"PubChem request to '{url}' failed with HTTP "
+        f"{response.status_code} ({fault.get('Code', 'unknown')}: "
+        f"{fault.get('Message', response.reason)}) after "
+        f"{num_retries + 1} attempts")
 
 
 def clean_up_description(description: str) -> str:
@@ -249,8 +283,8 @@ class MoleculeGPTDataset(InMemoryDataset):
                 f_out = open(
                     f"{step1_folder}/Compound_description_{page_num}.txt", "w")
 
-                description_data = requests.get(
-                    self.description_url.format(page_num)).json()
+                description_data = _get_pubchem_json(
+                    self.description_url.format(page_num))
 
                 description_data = description_data["Annotations"]
                 assert description_data["Page"] == page_num
