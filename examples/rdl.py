@@ -14,11 +14,8 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import sklearn.metrics as skm
 import torch
 import torch_frame
-from numpy.typing import NDArray
-from relbench import load_dataset
 from relbench.base import EntityTask, Table, TaskType
 from relbench.modeling.graph import make_pkey_fkey_graph
 from relbench.modeling.utils import get_stype_proposal
@@ -41,9 +38,52 @@ from torch_geometric.nn import (
 from torch_geometric.seed import seed_everything
 from torch_geometric.typing import EdgeType, NodeType
 
+try:
+    # RelBench <= 2.x
+    from relbench.datasets import get_dataset
+    from relbench.tasks import get_task, get_task_names
 
-def mae(true: NDArray[np.float64], pred: NDArray[np.float64]) -> float:
-    return skm.mean_absolute_error(true, pred)
+    eval_metrics = None
+
+    def load_relbench_dataset(name):
+        return get_dataset(name, download=True)
+
+    def relbench_task_names(dataset, datasetName):
+        return get_task_names(datasetName)
+
+    def relbench_get_task(dataset, task_name, name):
+        return get_task(dataset_name=name, task_name=task_name, download=True)
+
+except ImportError:
+    # RelBench >= 3.x
+    import sklearn.metrics as skm
+    from numpy.typing import NDArray
+    from relbench import load_dataset
+
+    def mae(true: NDArray[np.float64], pred: NDArray[np.float64]) -> float:
+        return skm.mean_absolute_error(true, pred)
+
+    eval_metrics = [mae]
+
+    def load_relbench_dataset(name):
+        return load_dataset(name)
+
+    def relbench_task_names(dataset, datasetName):
+        return dataset.get_task_names()
+
+    def relbench_get_task(dataset, task_name, name):
+        return dataset.load_task(task_name)
+
+
+REL_BENCH_DATASETS = [
+    "rel-amazon",
+    "rel-avito",
+    "rel-event",
+    "rel-f1",
+    "rel-hm",
+    "rel-stack",
+    "rel-trial",
+]
 
 
 class GloveTextEmbedding:
@@ -576,16 +616,6 @@ def test(
 def main():
     seed_everything(42)
 
-    REL_BENCH_DATASETS = [
-        "rel-amazon",
-        "rel-avito",
-        "rel-event",
-        "rel-f1",
-        "rel-hm",
-        "rel-stack",
-        "rel-trial",
-    ]
-
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--dataset", type=str, default="rel-f1",
@@ -608,13 +638,13 @@ def main():
     print("Using device:", device)
 
     print("Loading dataset and task...")
-    dataset = load_dataset(args.dataset)
-    task_names = dataset.get_task_names()
+    dataset = load_relbench_dataset(args.dataset)
+    task_names = relbench_task_names(dataset, args.dataset)
     assert args.task in task_names, (
         f"Invalid --task '{args.task}' for --dataset '{args.dataset}'. "
         f"Available tasks: {task_names}")
 
-    task = dataset.load_task(args.task)
+    task = relbench_get_task(dataset, args.task, args.dataset)
     print(f"Task type: {task.task_type}")
     print(f"Target column: '{task.target_col}'")
     print(f"Entity table: '{task.entity_table}'")
@@ -719,7 +749,8 @@ def main():
             task=task,
             device=device,
         )
-        val_metrics = task.evaluate(val_pred, val, [mae])
+
+        val_metrics = task.evaluate(val_pred, val, eval_metrics)
         print(
             f"Epoch: {epoch:02d}, "
             f"train_loss: {train_loss:.4f}, "
