@@ -6,7 +6,7 @@ import sys
 import time
 from collections import defaultdict
 from multiprocessing import Pool
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import requests
@@ -23,33 +23,66 @@ def _get_pubchem_json(
     url: str,
     num_retries: int = 5,
     delay: float = 5.0,
-) -> dict:
+    timeout: float = 60.0,
+) -> Dict[str, Any]:
     r"""Fetches a PubChem PUG-View JSON page.
 
     PubChem answers with HTTP 503 and a :obj:`{"Fault": {"Code":
     "PUGVIEW.ServerBusy", ...}}` body (instead of the requested data) whenever
-    it is rate-limited or busy, so the request is retried with exponential
-    backoff before giving up with a descriptive error.
+    it is rate-limited or busy. Such responses, other :obj:`429`/:obj:`5xx`
+    responses, transport errors (connection, timeout, undecodable body) and
+    :obj:`2xx` responses whose body is not a JSON object (a body truncated in
+    transit) are retried with exponential backoff; anything else (or
+    exhausting the retries) raises a descriptive :class:`RuntimeError`.
     """
+    if num_retries < 0:
+        raise ValueError(f"'num_retries' must be non-negative "
+                         f"(got {num_retries})")
+    transient_errors = (
+        requests.ConnectionError,
+        requests.Timeout,
+        requests.exceptions.ChunkedEncodingError,
+        requests.exceptions.ContentDecodingError,
+    )
     for attempt in range(num_retries + 1):
-        response = requests.get(url)
         try:
-            data = response.json()
-        except ValueError:
-            data = {}
+            response = requests.get(url, timeout=timeout)
+        except transient_errors as e:
+            error, retryable = f'{type(e).__name__}: {e}', True
+        else:
+            try:
+                data = response.json()
+            except ValueError:
+                data = None
+            # A `2xx` whose body is not a JSON object was cut or garbled in
+            # transit (`urllib3<2` does not enforce `Content-Length`), so it
+            # is treated like a transport error:
+            malformed = not isinstance(data, dict) or not data
+            if malformed:
+                data = {}
+            elif response.ok and 'Fault' not in data:
+                return data
 
-        if response.ok and 'Fault' not in data:
-            return data
+            fault = data.get('Fault')
+            if not isinstance(fault, dict):
+                fault = {}
+            code = fault.get('Code', 'unknown')
+            reason = response.reason
+            if response.ok and malformed:
+                reason = 'malformed body'
+            error = (f"HTTP {response.status_code} ({code}: "
+                     f"{fault.get('Message', reason)})")
+            retryable = (response.status_code == 429
+                         or response.status_code >= 500
+                         or code == 'PUGVIEW.ServerBusy'
+                         or (response.ok and malformed))
 
-        if attempt < num_retries:
-            time.sleep(delay * 2**attempt)
+        if not retryable or attempt == num_retries:
+            break
+        time.sleep(delay * 2**attempt)
 
-    fault = data.get('Fault', {})
-    raise RuntimeError(
-        f"PubChem request to '{url}' failed with HTTP "
-        f"{response.status_code} ({fault.get('Code', 'unknown')}: "
-        f"{fault.get('Message', response.reason)}) after "
-        f"{num_retries + 1} attempts")
+    raise RuntimeError(f"PubChem request to '{url}' failed with {error} "
+                       f"after {attempt + 1} attempt{'s' if attempt else ''}")
 
 
 def clean_up_description(description: str) -> str:
